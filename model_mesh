@@ -1,0 +1,297 @@
+# 模型修改后 
+
+  
+
+#!/usr/bin/env python 
+
+  
+
+from __future__ import print_function 
+
+  
+
+import os 
+
+import sys 
+
+  
+
+output_directory = "E:\workdata_lhy\mymodel" 
+
+  
+
+  
+
+print("current dir: ", os.getcwd()) 
+
+  
+
+  
+
+  
+
+SEMoutput = os.path.join(output_directory, "MESH") 
+
+CUBIToutput = os.path.join(output_directory, "MESH_GEOCUBIT") 
+
+  
+
+  
+
+os.system("mkdir -p " + SEMoutput) 
+
+os.system("mkdir -p " + CUBIToutput) 
+
+  
+
+found_lib = False 
+
+for path in sys.path: 
+
+    if "geocubitlib" in path: 
+
+        found_lib = True 
+
+        break 
+
+if not found_lib: 
+
+    sys.path.append("../../CUBIT_GEOCUBIT/geocubitlib") 
+
+    sys.path.append("../../CUBIT_GEOCUBIT") 
+
+  
+
+print("path:") 
+
+for path in sys.path: 
+
+    print("  ", path) 
+
+print("") 
+
+  
+
+import cubit 
+
+from geocubitlib import boundary_definition, cubit2specfem3d 
+
+  
+
+try: 
+
+    cubit.init(["-noecho", "-nojournal"]) 
+
+except: 
+
+    pass 
+
+  
+
+version = cubit.get_version() 
+
+version_major = int(version.split(".")[0]) 
+
+version_minor = int(version.split(".")[1]) 
+
+print("cubit version: ", version) 
+
+  
+
+cubit.cmd("reset") 
+
+cubit.cmd("brick x 300 y 80 z 100") 
+
+  
+
+  
+
+cubit.cmd('volume 1 move x 150 y 40 z -50') 
+
+  
+
+  
+
+  
+
+  
+
+  
+
+# 创建第一层介质的分界线 
+
+distance = 20 
+
+cubit.cmd("split curve 9  distance " + str(distance)) 
+
+cubit.cmd("split curve 10  distance " + str(distance)) 
+
+cubit.cmd("split curve 11  distance " + str(distance)) 
+
+cubit.cmd("split curve 12  distance " + str(distance)) 
+
+  
+
+# 创建分界面 
+
+cubit.cmd("create surface vertex 9 10 12 11") 
+
+  
+
+# 切割体积 
+
+cubit.cmd("section volume 1 with surface 7 keep normal") 
+
+cubit.cmd("section volume 1 with surface 7 reverse") 
+
+  
+
+# 也需要把多余的体积 2 删掉，因为它是在体积 1 被切割时备份出来的多余的体积 
+
+cubit.cmd("delete volume 2") 
+
+  
+
+  
+
+cubit.cmd("merge all") 
+
+cubit.cmd("imprint all") 
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+# Meshing the volumes 
+
+## top volume 
+
+cubit.cmd("volume 1 size 3.0") 
+
+cubit.cmd("mesh volume 1") 
+
+  
+
+## bottom volume 
+
+cubit.cmd("volume 3 size 3.0") 
+
+cubit.cmd("mesh volume 3") 
+
+  
+
+cubit.cmd("draw volume all") 
+
+  
+
+  
+
+  
+
+  
+
+  
+
+boundary_definition.entities = ["face"] 
+
+boundary_definition.define_bc(boundary_definition.entities, parallel=True) 
+
+  
+
+#### 定义 2 个体积的材料属性 ################ 
+
+cubit.cmd("#### DEFINE MATERIAL PROPERTIES #######################") 
+
+cubit.cmd('block 1 name "elastic 1" ')  # elastic material region 
+
+cubit.cmd("block 1 attribute count 6") 
+
+cubit.cmd("block 1 attribute index 1 1  ")  # volume 1 
+
+cubit.cmd("block 1 attribute index 2 2000 ")  # vp 
+
+cubit.cmd("block 1 attribute index 3 1000 ")  # vs 
+
+cubit.cmd("block 1 attribute index 4 2000 ")  # rho 
+
+cubit.cmd("block 1 attribute index 5 9000.0 ")  # Q_mu 
+
+cubit.cmd("block 1 attribute index 6 0 ")  # anisotropy_flag 
+
+  
+
+cubit.cmd('block 2 name "elastic 2" ')  # elastic material region 
+
+cubit.cmd("block 2 attribute count 6") 
+
+cubit.cmd("block 2 attribute index 1 2  ")  # volume 2 
+
+cubit.cmd("block 2 attribute index 2 3000 ")  # vp 
+
+cubit.cmd("block 2 attribute index 3 2000 ")  # vs 
+
+cubit.cmd("block 2 attribute index 4 3000 ")  # rho 
+
+cubit.cmd("block 2 attribute index 5 9000.0 ")  # Q_mu 
+
+cubit.cmd("block 2 attribute index 6 0 ")  # anisotropy_flag 
+
+  
+
+# 保存模型 
+
+cubit.cmd('export mesh "' + CUBIToutput + '/new_model.e" dimension 3 overwrite') 
+
+cubit.cmd('save as "' + CUBIToutput + '/new_model.cub" overwrite') 
+
+  
+
+  
+
+# 导出 SPECFEM3D 格式 
+
+cubit2specfem3d.export2SPECFEM3D(SEMoutput) 
+
+  
+
+  
+
+  
+
+# 屏幕截图 
+
+# (版本 < 16.4 可能会崩溃) 
+
+if version_major >= 16 and version_minor >= 4: 
+
+    cubit.cmd("view top") 
+
+    cubit.cmd('hardcopy "' + CUBIToutput + '/new_model.png" png') 
