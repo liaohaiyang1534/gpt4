@@ -151,3 +151,16 @@ if arrivals:
     plot_travel_time_curve(distances, arrivals) 
 else:
     print("未找到到达时间。无法绘制走时曲线。")
+
+
+
+
+输出结果：
+Found files:
+C:\Users\haiyang\DAS_modeling\specfem3d_modeling\outputfiles_imaging\OUTPUT_FILES\DB.X01.FXX.sac
+C:\Users\haiyang\DAS_modeling\specfem3d_modeling\outputfiles_imaging\OUTPUT_FILES\DB.X02.FXX.sac
+C:\Users\haiyang\DAS_modeling\specfem3d_modeling\outputfiles_imaging\OUTPUT_FILES\DB.X03.FXX.sac
+
+
+
+
