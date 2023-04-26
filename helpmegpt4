@@ -1,0 +1,270 @@
+怎么提供一个正确的 absorbing_cpml_file 文件
+
+
+我给你一段python代码：
+#!/usr/bin/env python
+from __future__ import print_function
+
+import cubit
+import boundary_definition
+import cubit2specfem3d
+
+import os
+import sys
+
+# two volumes separating 134000x134000x60000 block horizontally
+cubit.cmd('reset')
+cubit.cmd('brick x 67000 y 134000 z 60000')
+cubit.cmd('volume 1 move x 33500 y 67000 z -30000')
+cubit.cmd('brick x 67000 y 134000 z 60000')
+cubit.cmd('volume 2 move x 100500 y 67000 z -30000')
+cubit.cmd('merge all')
+
+# Meshing the volumes
+elementsize = 3750.0
+
+cubit.cmd('volume 1 size '+str(elementsize))
+cubit.cmd('volume 2 size '+str(elementsize))
+cubit.cmd('mesh volume 1 2')
+
+
+#### End of meshing
+
+###### This is boundary_definition.py of GEOCUBIT
+#..... which extracts the bounding faces and defines them into blocks
+boundary_definition.entities=['face']
+boundary_definition.define_bc(boundary_definition.entities,parallel=True)
+
+#### Define material properties for the 3 volumes ################
+cubit.cmd('#### DEFINE MATERIAL PROPERTIES #######################')
+cubit.cmd('block 1 name "elastic" ')        # elastic material region
+cubit.cmd('block 1 attribute count 6')
+cubit.cmd('block 1 attribute index 1 1')      # flag for material: 1 for 1. material
+cubit.cmd('block 1 attribute index 2 2800')   # vp
+cubit.cmd('block 1 attribute index 3 1500')   # vs
+cubit.cmd('block 1 attribute index 4 2300')   # rho
+cubit.cmd('block 1 attribute index 5 9000.0')  # Qmu
+cubit.cmd('block 1 attribute index 6 1 ')      # anisotropy_flag
+
+cubit.cmd('block 2 name "elastic" ')        # elastic material region
+cubit.cmd('block 2 attribute count 6')
+cubit.cmd('block 2 attribute index 1 1')      # flag for material: 1 for 1. material
+cubit.cmd('block 2 attribute index 2 2800')   # vp
+cubit.cmd('block 2 attribute index 3 1500')   # vs
+cubit.cmd('block 2 attribute index 4 2300')   # rho
+cubit.cmd('block 2 attribute index 5 9000.0')  # Q_mu
+cubit.cmd('block 2 attribute index 6 0 ')      # anisotropy_flag
+
+
+cubit.cmd('export mesh "top.e" dimension 3 overwrite')
+cubit.cmd('save as "meshing.cub" overwrite')
+
+#### Export to SPECFEM3D format using cubit2specfem3d.py of GEOCUBIT
+
+os.system('mkdir -p MESH')
+cubit2specfem3d.export2SPECFEM3D('MESH')
+
+# all files needed by SCOTCH are now in directory MESH
+
+
+这个呢，它的对应的par_file文件里面的一部分是这样的：
+#-----------------------------------------------------------
+#
+# Mesh
+#
+#-----------------------------------------------------------
+
+# Number of nodes for 2D and 3D shape functions for hexahedra.
+# We use either 8-node mesh elements (bricks) or 27-node elements.
+# If you use our internal mesher, the only option is 8-node bricks (27-node elements are not supported).
+NGNOD                           = 8
+
+# models:
+# available options are:
+#   default (model parameters described by mesh properties)
+# 1D models available are:
+#   1d_prem,1d_socal,1d_cascadia
+# 3D models available are:
+#   aniso,external,gll,salton_trough,tomo,SEP,coupled,...
+MODEL                           = default
+
+# path for external tomographic models files
+TOMOGRAPHY_PATH                 = ./DATA/tomo_files/
+# if you are using a SEP model (oil-industry format)
+SEP_MODEL_DIRECTORY             = ./DATA/my_SEP_model/
+
+#-----------------------------------------------------------
+
+# parameters describing the model
+APPROXIMATE_OCEAN_LOAD          = .false.
+TOPOGRAPHY                      = .false.
+ATTENUATION                     = .false.
+ANISOTROPY                      = .false.
+GRAVITY                         = .false.
+
+# in case of attenuation, reference frequency in Hz at which the velocity values in the velocity model are given (unused otherwise)
+ATTENUATION_f0_REFERENCE        = 0.33333d0
+
+# attenuation period range over which we try to mimic a constant Q factor
+MIN_ATTENUATION_PERIOD          = 999999998.d0
+MAX_ATTENUATION_PERIOD          = 999999999.d0
+# ignore this range and ask the code to compute it automatically instead based on the estimated resolution of the mesh (use this unless you know what you are doing)
+COMPUTE_FREQ_BAND_AUTOMATIC     = .true.
+
+# Olsen's constant for Q_mu = constant * V_s attenuation rule
+USE_OLSEN_ATTENUATION           = .false.
+OLSEN_ATTENUATION_RATIO         = 0.05
+
+#-----------------------------------------------------------
+#
+# Absorbing boundary conditions
+#
+#-----------------------------------------------------------
+
+# C-PML boundary conditions for a regional simulation
+# (if set to .false., and STACEY_ABSORBING_CONDITIONS is also set to .false., you get a free surface instead
+# in the case of elastic or viscoelastic mesh elements, and a rigid surface in the case of acoustic (fluid) elements
+PML_CONDITIONS                  = .true.
+
+# C-PML top surface
+PML_INSTEAD_OF_FREE_SURFACE     = .false.
+
+# C-PML dominant frequency
+f0_FOR_PML                      = 0.05555
+
+# parameters used to rotate C-PML boundary conditions by a given angle (not completed yet)
+# ROTATE_PML_ACTIVATE           = .false.
+# ROTATE_PML_ANGLE              = 0.
+
+# absorbing boundary conditions for a regional simulation
+# (if set to .false., and PML_CONDITIONS is also set to .false., you get a free surface instead
+# in the case of elastic or viscoelastic mesh elements, and a rigid surface in the case of acoustic (fluid) elements
+STACEY_ABSORBING_CONDITIONS     = .false.
+
+# absorbing top surface (defined in mesh as 'free_surface_file')
+STACEY_INSTEAD_OF_FREE_SURFACE  = .false.
+
+# When STACEY_ABSORBING_CONDITIONS is set to .true. :
+# absorbing conditions are defined in xmin, xmax, ymin, ymax and zmin
+# this option BOTTOM_FREE_SURFACE can be set to .true. to
+# make zmin free surface instead of absorbing condition
+BOTTOM_FREE_SURFACE             = .false.
+
+
+所以你可不可以帮我修改以下模型代码，以帮我生成合适的absorbing_cpml_file 文件，代码：
+#!/usr/bin/env python
+
+from __future__ import print_function
+
+import os
+import sys
+
+output_directory = "E:\workdata_lhy\mymodel"
+
+print("current dir: ", os.getcwd())
+
+SEMoutput = os.path.join(output_directory, "MESH")
+CUBIToutput = os.path.join(output_directory, "MESH_GEOCUBIT")
+
+os.system("mkdir -p " + SEMoutput)
+os.system("mkdir -p " + CUBIToutput)
+
+found_lib = False
+for path in sys.path:
+    if "geocubitlib" in path:
+        found_lib = True
+        break
+if not found_lib:
+    sys.path.append("../../CUBIT_GEOCUBIT/geocubitlib")
+    sys.path.append("../../CUBIT_GEOCUBIT")
+
+print("path:")
+for path in sys.path:
+    print("  ", path)
+print("")
+
+import cubit
+from geocubitlib import boundary_definition, cubit2specfem3d
+
+try:
+    cubit.init(["-noecho", "-nojournal"])
+except:
+    pass
+
+version = cubit.get_version()
+version_major = int(version.split(".")[0])
+version_minor = int(version.split(".")[1])
+print("cubit version: ", version)
+
+cubit.cmd("reset")
+cubit.cmd("brick x 300 y 80 z 100")
+
+cubit.cmd('volume 1 move x 150 y 40 z -50')
+
+# 创建第一层介质的分界线
+distance = 20
+cubit.cmd("split curve 9  distance " + str(distance))
+cubit.cmd("split curve 10  distance " + str(distance))
+cubit.cmd("split curve 11  distance " + str(distance))
+cubit.cmd("split curve 12  distance " + str(distance))
+
+# 创建分界面
+cubit.cmd("create surface vertex 9 10 12 11")
+
+# 切割体积
+cubit.cmd("section volume 1 with surface 7 keep normal")
+cubit.cmd("section volume 1 with surface 7 reverse")
+
+# 也需要把多余的体积 2 删掉，因为它是在体积 1 被切割时备份出来的多余的体积
+cubit.cmd("delete volume 2")
+
+cubit.cmd("merge all")
+cubit.cmd("imprint all")
+
+# Meshing the volumes
+## top volume
+cubit.cmd("volume 1 size 1")
+cubit.cmd("mesh volume 1")
+
+## bottom volume
+cubit.cmd("volume 3 size 1")
+cubit.cmd("mesh volume 3")
+
+cubit.cmd("draw volume all")
+
+boundary_definition.entities = ["face"]
+boundary_definition.define_bc(boundary_definition.entities, parallel=True)
+
+#### 定义 2 个体积的材料属性 ################
+cubit.cmd("#### DEFINE MATERIAL PROPERTIES #######################")
+cubit.cmd('block 1 name "elastic 1" ')  # elastic material region
+cubit.cmd("block 1 attribute count 6")
+cubit.cmd("block 1 attribute index 1 1  ")  # volume 1
+cubit.cmd("block 1 attribute index 2 2000 ")  # vp
+cubit.cmd("block 1 attribute index 3 1000 ")  # vs
+cubit.cmd("block 1 attribute index 4 2000 ")  # rho
+cubit.cmd("block 1 attribute index 5 9000 ")  # Q_mu
+
+cubit.cmd("block 1 attribute index 6 0 ")  # anisotropy_flag
+
+cubit.cmd('block 2 name "elastic 2" ')  # elastic material region
+cubit.cmd("block 2 attribute count 6")
+cubit.cmd("block 2 attribute index 1 2  ")  # volume 2
+cubit.cmd("block 2 attribute index 2 3000 ")  # vp
+cubit.cmd("block 2 attribute index 3 2000 ")  # vs
+cubit.cmd("block 2 attribute index 4 3000 ")  # rho
+cubit.cmd("block 2 attribute index 5 9000.0 ")  # Q_mu
+cubit.cmd("block 2 attribute index 6 0 ")  # anisotropy_flag
+
+# 保存模型
+cubit.cmd('export mesh "' + CUBIToutput + '/new_model.e" dimension 3 overwrite')
+cubit.cmd('save as "' + CUBIToutput + '/new_model.cub" overwrite')
+
+# 导出 SPECFEM3D 格式
+cubit2specfem3d.export2SPECFEM3D(SEMoutput)
+
+# 屏幕截图
+# (版本 < 16.4 可能会崩溃)
+if version_major >= 16 and version_minor >= 4:
+    cubit.cmd("view top")
+    cubit.cmd('hardcopy "' + CUBIToutput + '/new_model.png" png')
